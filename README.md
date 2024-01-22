@@ -15,6 +15,6 @@ La versión final del trabajo puede visualizarse en: <https://AdriGuijarro.githu
 
 Autor: Adrián Guijarro Martínez (aguimar2@alumni.uv.es)
 
-El título del trabajo es PIB español y Capital humano. En el trabajo he analizado la evolución de la renta per cápita española, así como, uno de sus principales determinantes: la productividad. El comportamiento de esta última es especialmente deficiente en los últimos años por los que es necesario tomar medidas para revertir esta situación, entre ellas, mejorar el capital humano del país.
+El título del trabajo es: PIB español y Capital humano. En el trabajo he analizado la evolución de la renta per cápita española, así como, uno de sus principales determinantes: la productividad. El comportamiento de esta última es especialmente deficiente en los últimos años por los que es necesario tomar medidas para revertir esta situación, entre ellas, mejorar el capital humano del país.
 
 
