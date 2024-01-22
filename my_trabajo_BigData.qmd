@@ -1,0 +1,333 @@
+---
+title: "PIB español y Capital humano"
+description: |
+  La importancia del capital humano y la educación
+author:
+  - name: Adrián Guijarro
+    affiliation: Universitat de València
+    affiliation-url: https://www.uv.es
+date: 2024-01-22                           #--
+categories: [trabajo BigData, PIB, Capital Humano, PTF]   #--
+image: "./imagenes/lucas.jpg"
+title-block-banner: true #- {true, false, "green","#AA0000"}
+title-block-banner-color: "snow"    #-"#FFFFFF" 
+toc-depth: 3
+smooth-scroll: true
+format: 
+  html:
+    backgroundcolor: "#F1F3F4"
+    #embed-resources: true
+    link-external-newwindow: true
+    css: ./assets/my_css_file.css   #- CUIDADO!!!!
+code-tools: true
+code-link: true
+---
+
+
+## 0. Intro 
+
+En los últimos tiempos, se está  reavivando el debate público y en el mundo académico de los problemas que adolece la economía española. La mayor parte de académicos alcanzan una misma conclusión, la productividad española lleva practicamente dos décadas estancada. Recientemente la Fundación BBVA y el Ivie publicaron un informe en el que se muestra la comparativa de la evolución de la productividad española junto a otros países de la OCDE^[<https://www.fbbva.es/noticias/informe-productividad-competencia-espana/>]. Resulta muy llamativo observar que para el **periodo 2000-2022** la tasa de **variación acumulada de la productividad total de los factores** fue de un **-7,3%**, mientras que para países tales que, Alemania o Reino Unido la evolución fue muy diferente(11,8% y 8,8%, respectivamente).
+
+Este problema como veremos a continuación, generará dificultades para mejorar el nivel de vida de la población española, además, limita la competitividad internacional debido a la menor eficiencia de nuestro sistema productivo.
+
+En este trabajo analizaré las consecuencias a largo plazo que tendrá el estancamiento de la productividad española, además, propondré una mejora en el desarrollo del capital humano como medida para mejorar la productividad, basándome en las teorías de crecimiento éndogeno. Para ello los datos han sido extraídos del `Banco de España` y de las Penn World Tables a través del package `pwt10`.
+
+
+```{r}
+#| warning: false
+library(pwt10)
+library(rio)
+library(tidyverse)
+library(highcharter)
+library(gt)
+library(gtExtras)
+library(ggthemes)
+library(RColorBrewer)
+library(plotly)
+library(stargazer)
+library(jtools)
+library(DT)
+
+```
+
+
+
+---
+
+## 1. Evolución del PIB per cápita para diversos países
+
+
+En primer lugar, he realizado un gráfico donde se puede ver la serie histórica de la evolución del PIB per cápita para diferentes páises. Los datos de PIB están medidos en dólares de 2017 y ajustados por Paridad de Poder Adquisitivo (PPA).
+
+Cabe destacar que se pueden observar dos grupos de países. Uno formado por páises de renta más alta (EEUU, Alemania, Francia) y otro con rentas más bajas (España, Portugal o Italia). En el presente trabajo trataremos de desentrañar que es lo que nos ha llevado a ser uno de estos países con un PIB per capíta relativamente más bajo y como podemos aumentarlo de cara al futuro.
+
+
+```{r}
+df_2 <- pwt10.01
+
+ df_3 <- df_2 %>%
+   filter(country %in% c("Spain", "France", "Germany", "Italy", "Portugal","United States of America", "Japan")) %>% select(country, year, pop, rgdpna, rgdpe, rgdpo,hc) %>% 
+   mutate(pib_pc = rgdpo/pop,
+          pib_pc = round(pib_pc,2))
+ 
+hc_2 <- df_3 %>% hchart('line', hcaes(x = 'year', y = 'pib_pc', group = 'country')) %>%
+   hc_title(text = "Evolución PIB per cápita,PPA($ de 2017)") %>%
+   hc_caption(text = "Fuente:Penn World Tables 10.01") %>%
+   hc_yAxis(title =  "PIB per cápita") %>%
+   hc_xAxis(title =  NULL)
+   
+ hc_2
+```
+
+
+## 2. PIB español desagregado
+
+En este punto, analizaremos la tasa de variación del PIB así como su descomposición.
+
+En el gráfico siguiente observamos ciertos valores que destacan a simple vista. Por ejemplo, en el año 1961 tuvo lugar una tasa de crecimiento del PIB del 11,84%, causada mas que probalmente por la entrada en vigor del Plan de Estabilizacion en 1959. Otro dato a destacar es que en el año 2009 con la Gran Recesión se produjo la mayor caída del PIB de la serie estudiada(No he recogido datos hasta 2020).
+
+Respecto a los componentes del PIB, es interesante ver como el consumo se comporta de manera procíclica, casi replicando los movimientos del PIB. Además del consumo, el otro componente que merece la pena resaltar es el gasto público, el cúal, practicamente solo se ha visto reducido tras el año 2012 y el rescate de Europa.
+
+```{r}
+ruta <- "./datos/datos_esp.xlsx"
+df <- rio::import(ruta)
+df <- df %>% rename(C = `Consumo privado`,
+                    G = `Gasto Público`,
+                    I = `Inversión`,
+                    X = `Exportación de bienes y servicios`,
+                    M = `Importación de bienes y servicios`)
+
+df <- df %>% mutate(M = M*-1)
+
+df <- df %>% pivot_longer(cols = 3:7, names_to = "componentes", values_to = "saldo")
+
+
+df <- df %>% group_by(componentes) %>% 
+  mutate(var_saldo_pib = ((saldo - lag(saldo))/lag(PIB))*100)
+
+df <- df %>% mutate(variacion_pib  = ((PIB - lag(PIB))/lag(PIB))*100)
+
+g <- ggplot(data = df) + 
+  geom_bar(data = df,aes(x = año, y = var_saldo_pib,  fill = componentes),position = "stack", stat = "identity") +
+  geom_line(data = df, aes(año,variacion_pib), color = "red")
+
+df <- df %>% mutate(var_saldo_pib = round(var_saldo_pib, 2),
+                    variacion_pib = round(variacion_pib, 2))
+
+hc <- df %>% 
+  hchart(
+    'column', hcaes(x = 'año', y = 'var_saldo_pib', group = 'componentes'),
+    stacking = "normal") %>%
+  hc_add_series(df, "line", hcaes(año, variacion_pib), name = "PIB") %>%
+  hc_title(text = "Tasa de crecimiento del PIB y sus componentes")  %>%
+  hc_xAxis(title = list(text = NULL)) %>%
+  hc_yAxis(title = list(text = "Porcentaje(%)")) %>%
+  hc_caption(text = "Fuente: Banco de España")
+hc
+```
+
+
+
+
+## 3. Descomponiendo el PIB per cápita
+
+En esta sección he utilizado los datos de las Penn World Tables (PWT) para desagregar el PIB per cápita español y conocer mejor que hay detrás de este indicador. El PIB per capita puede descomponerse de la siguinete forma:
+
+$$\ PIBpc = (PIB/empleo)*(empleo/población)$$
+Esta expresión nos muestra que el PIB per cápita esta compuesto por la productividad del trabajo (PIB/ empleo) y del empleo per cápita (empleo/población). En la tabla siguiente encontramos los resultados de la descomposición de la renta per cápita con datos desde el año 1951.
+<br><br>
+
+
+
+```{r}
+df_product_1 <- df_2 %>% select(country, year, rgdpo, emp, pop) %>%
+  filter(country == "Spain") %>%
+  mutate(tc_pib = (rgdpo-lag(rgdpo))/lag(rgdpo),
+         tc_pop = (pop-lag(pop))/lag(pop),
+         tc_emp = (emp-lag(emp))/lag(emp)) %>%
+  mutate(tc_pib_pc = (tc_pib-tc_emp) + (tc_emp - tc_pop)) 
+
+
+df_product_2 <- df_product_1 %>% mutate(tc_p_l = (tc_pib - tc_emp)*100,
+                                    tc_emp_pc = (tc_emp - tc_pop)*100,
+                                    tc_pib_pc = tc_pib_pc*100) %>%
+  select(country, year, tc_pib_pc, tc_p_l, tc_emp_pc) %>%
+  filter(!year == 1950) %>%
+  select(!country) %>%
+  mutate(`Contribución Productividad` = (tc_p_l/tc_pib_pc)*100,
+         `Contribución empleo per cápita` = (tc_emp_pc/tc_pib_pc)*100) %>%
+  rename(`PIB per cápita`= tc_pib_pc,
+         `Empleo per cápita` = tc_emp_pc,
+         `Productividad del trabajo` = tc_p_l,
+         Año = year) %>%
+  mutate(`PIB per cápita`= round(`PIB per cápita`,2),
+         `Empleo per cápita`= round(`Empleo per cápita`,2),
+         `Productividad del trabajo` = round(`Productividad del trabajo`,2),
+         `Contribución Productividad`= round(`Contribución Productividad`,2),
+         `Contribución empleo per cápita`= round(`Contribución empleo per cápita`,2)
+         
+         )
+
+## TABLA GT
+tabla <- DT::datatable(df_product_2,
+                       class = 'cell-border stripe',
+                       caption = "Descomposición del PIB per cápita en tasas de variación",
+                       colnames = c("Año", "PIB per cápita", "Productividad del trabajo", "Empleo per cápita", "Contribución Productividad(%)","Contribución empleo per cápita(%)")) %>%
+  formatStyle(c("Productividad del trabajo","Contribución Productividad" ), 
+    backgroundColor = 'lightblue',
+    fontWeight = "bold") %>%
+  formatStyle(c("Empleo per cápita", "Contribución empleo per cápita"),
+              backgroundColor = "palegreen",
+              fontWeight = "bold") %>%
+  formatStyle("PIB per cápita",
+              backgroundColor = "aquamarine",
+              fontWeight = "bold")
+tabla
+
+
+```
+<br><br>
+
+Las tasas de crecimiento de la productividad fueron bastante altas desde los 50 hasta las crisis del petróleo, momento en el que se empieza a ralentizar el avance. Durante los años 2000 el crecimiento es muy poco significativo, debido a que los mayores avances se dieron entre los años 2005-2007(años influenciados por la burbuja inmobiliraria). A partir de estos años se puede observar que sigue siendo positiva la tasa de crecimiento de la productivid, no obstante, esto se debe a un fenomeno estadístico. Hemos definido la productividad del trabajo como:$$ productividad = PIB/empleo$$
+
+Por tanto el **incremento de la productividad en estos años se debe tan solo a la masiva destrucción de empleo** que sufrió la economía española como consecuencia de la crisis financiera de 2008. Para visualizar de manera más clara las variaciones en los componenetes del PIB per cápita he realizado la siguiente gráfica:
+```{r}
+df_plot <- df_product_2 %>% select(`Año`,`PIB per cápita` , `Productividad del trabajo`, `Empleo per cápita`)
+
+df_plot <- df_plot %>% pivot_longer(cols = 3:4, names_to = "componentes_pibpc", values_to = "tasa_variacion")
+
+df_plot <- df_plot %>% mutate(Componentes = componentes_pibpc)
+
+plot <- ggplot() + 
+  geom_bar(data = df_plot,aes(x = Año, y = tasa_variacion,  fill = Componentes),position = "stack", stat = "identity") + 
+  geom_line(data = df_plot, aes(Año, `PIB per cápita`), color = "darkblue") +
+  theme_economist_white() +
+  scale_x_continuous(breaks = seq(1955,2020,5)) +
+  labs(title = "Descomposición del PIB per cápita",
+       subtitle = "Tasas de variación en %",
+       guides = NULL, 
+       x = NULL,
+       y = NULL,
+       caption = "Fuente: Penn World Tables 10.01",
+       color = "componentes") 
+plot
+```
+
+Este escenario nos lleva a una situación en la que la productividad del trabajo ha crecido de una manera poco significativa en los últimos 20 años. Uno de los factores que explican este resultado es el estancamiento de la productividad total de los factores(PTF). Como se puede observar a continuación, los incrementos de la productividad iban muy ligados a aumentos de la PTF. No obstante, en los años 2000 las mejoras en la PTF son muy reducidos generando problemas para conseguir mejoras en la productividad del trabajo. Por tanto nos encontramos con que la economía española lleva dos décadas perdidas en el avance de su productividad total de los factores.
+<br><br>
+
+```{r}
+pl <- df_4 <- df_2 %>%
+  filter(country== "Spain") %>%
+  select(year,country,rtfpna) %>%
+  mutate(var_ptf = (rtfpna- lag(rtfpna))/lag(rtfpna),
+         var_ptf_per = var_ptf*100)
+
+
+ptf <- ggplot()+
+  geom_col(data = pl, aes(year,var_ptf_per, fill = "PTF")) +
+  geom_line(data = df_product_2, aes( x = Año, y =`Productividad del trabajo`, color = "Productividad del trabajo")) +
+  scale_fill_manual(values = "#6B8E23", name = NULL) +
+  scale_color_manual(values = "#2F4F4F", name = NULL) +
+  theme_hc() +
+  labs(title = "Evolución de la productividad del trabajo y la PTF",
+       subtitle = "Tasa de variación en %",
+       caption = "Fuente: Penn World Tables 10.01",
+       y = NULL,
+       x = NULL,
+       fill = NULL,
+       color = NULL)
+  
+ptf
+```
+
+
+---
+
+## 4. Importancia del capital humano
+
+La PTF es comunmente llamada como **"el residuo de Solow"**. El residuo de Solow recibe este nombre en honor al gigante de la economía Robert Solow (recientemente fallecido a los 99 años, DEP Bob) cuyo famoso modelo hemos estudiado todos a lo largo de la carrera. El residuo basicamente viene a representar aquella proporción del output que no se puede explicar por las aportaciones de los factores productivos (Capital y Trabajo). Según el modelo de Solow, este residuo está determinado de forma exógena, es decir, viene dado, y por tanto el crecimiento de la renta per cápita de una economía a largo plazo que depende de dicho residuo también será exógeno. Este resultado es claramente insatisfactorio ya que según el modelo de Solow no se podria alterar la tasa de crecimiento del PIB per cápita a largo plazo a través de medidas de politíca económica.
+
+Esta insatisfaccón llevo a los economistas a desarrollar una nueva clase de modelos. En los años 80 del siglo pasado aparecieron estos nuevos modelos conocidos como **"modelos de crecimiento endógeno"**. En este nuevo tipo de modelos los determinantes del crecimiento se determinan de manera endógena al modelo (al contrario de lo que ocurría en el modelo de Solow), y por tanto, sí que se puede ver afectada la tasa de crecimiento de la renta per cápita a largo plazo.
+
+Entre los modelos de crecimiento endógeno más importantes destacan: **El modelo de Lucas** (desarrollado por el economista Robert Lucas, tambíen conocido por la famosa "Critica de Lucas" y sus aportaciones a las expectativas racionales), el cuál incluye en su función de producción el capital humano, asi como, el tiempo dedicado a acumular el mismo. Otro modelo a destacar es el de Romer, quién introduce la inversión en I+D como potenciador de la productividad y por tanto del crecimiento. Además existen muchos otros modelos de crecimiento endógeno desarrollados por importantes econmistas tales que: Barro, Rebelo o más recientemente, Acemoglu.
+
+Lo apropiado en esta sección habría sido estimar alguno de estos modelos de crecimiento endógeno para observar si los datos respaldan dichas teorías, no obstante, dado el grado de complejidad requerido, he decidido realizar un análisis no tan riguroso pero que resalta la importancia de la educación en el crecimiento.
+
+En primer lugar he estimado una función de producción Cobb Douglas que incluye el capital humano:
+
+$$ Y = A \cdot K^\alpha \cdot (LH)^\beta $$
+Por tanto el modelo a estimar será: 
+$$\ln(Y_t) = \beta_1 + \beta_2\ln(K) + \beta_3\ln(L) + \beta_4ln(H) + u_t$$
+
+
+```{r}
+df_cb <- df_2 %>%
+  select(country, year, emp, avh, rnna, rgdpo, hc) %>%
+  mutate(k = rnna,
+         l = avh*emp,
+         gdp = rgdpo)
+
+
+model <- lm(log(gdp) ~ log(k) + log(l) + log(hc), data = df_cb)
+ # stargazer(model, type = "html")
+summ(model)
+
+```
+
+La estimación realizada recoge la muestra de todos los países que aparecen en las PWT. Como se puede observar, la variable del capital humano es **estadisticamente significativa**, no solo eso, si no que posee el coeficiente más grande. Por otra parte tambíen cabe destacar que el modelo se ajusta casi perfectamente con un  R^2^  de 0.95.
+
+```{r}
+df_2019 <- df_2 %>% filter(year == 2019) %>%
+  mutate(pib_pc = rgdpo/pop) %>%
+  select(country,year,pib_pc, hc, pop) %>%
+  mutate(pib_pc = round(pib_pc, 2),
+         hc = round(hc, 2)) %>%
+  rename(`PIB per cápita` = pib_pc,
+         `Capital Humano` = hc,
+         `Población` = pop,
+         País = country)
+
+gg <- ggplot(data = df_2019, aes(`PIB per cápita`, `Capital Humano`, size = `Población`, color = `Capital Humano`, label = País)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = "Capital Humano vs PIB per cápita,PPA($ de 2017)",
+       caption = "Fuente: Penn World Tables 10.01",
+       xlab = NULL,
+       ylab = NULL) +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  theme_few()
+ggplotly(gg)
+```
+
+La relación entre capital humano y renta per cápita tambíen se puede observar en el gráfico anterior, donde se refleja el PIB per cápita en el año 2019, la población(en millones de personas) y el índice de capital humano. Claramente se observa la **correlación positiva entre renta per cápita y capital humano**. Aunque sabemos que correlación no tiene porque implicar causalidad, los modelos de crecimiento éndogeno mencionados anteriormente si que corroboran dicho efecto causal y por tanto, si queremos parecernos a otros países de Europa en cuanto a nivel de PIB per cápita se refiere, deberemos mejorar nuestros niveles de capital humano. Esta mejora del capital humano conseguirá incrementar la productividad del trabajo y por tanto la renta de la población española en el largo plazo.
+
+
+
+## Conclusión
+Finalmente, me gustaría resaltar que el estancamiento de la productividad española es problemático, debido a que, sin mejoras en la productividad no conseguiremos hacer crecer nuestra renta en el largo plazo, y por tanto, tampoco lo hará el nivel de vida de nuestros ciudadanos.
+
+En este trabajo he intentado resaltar la importancia del capital humano debido a su capacidad de  generar mayores niveles de productividad, así como,  su relevancia como factor de producción a tener en cuenta junto al capital físico y al trabajo.
+
+Dicha mejora del capital humano debe venir de la mano de la **mejora en el proceso de acumulación de capital humano**, el cuál, está estrechamente relacionado con el sistema educativo. La mejora de la educación formal no tiene que venir solo de posibles aumentos del gasto en educación, sino que, se debe hacer enfasis en los métodos de aprendizaje o en los propios contenidos impartidos. Actualmente nos encontramos con planes de estudio en universidades totalmente desfasados y paralelos al mundo profesional, donde se enseñan conocimientos y habiliadades que no se demandan en el mercado laboral(Menos mal que llegó Pedro para enseñarnos R...😉).
+
+Por último (ahora de verdad), considero que más asiganturas como esta deberían ser añadidas en el plan de Economía, ya no solo porque muchas de las asignaturas que nos imparten son prácticamente una pérdida de tiempo, sino porque asignaturas como programación te ayudan a desarrollar una skill básica en el mundo de la Economía, la cuál es altamente demandada, bien quieras dedicarte al mundo profesional o al mundo de la investigación.
+
+<br>
+
+----------------------
+
+<br>
+
+### Información sobre la sesión
+
+Abajo muestro mi entorno de trabajo y paquetes utilizados
+
+```{r}
+#| echo: false
+sessioninfo::session_info() %>% 
+  details::details(summary = 'current session info') 
+```
+
+
+
